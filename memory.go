@@ -7,10 +7,10 @@ import (
 )
 
 type memoryBucket struct {
-	tokens    float64
-	last      time.Time
-	limit     int
-	window    time.Duration
+	tokens float64
+	last   time.Time
+	limit  int
+	window time.Duration
 }
 
 // MemoryLimiter is a process-local token bucket for tests.
