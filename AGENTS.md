@@ -1,3 +1,9 @@
+---
+read_with:
+  - handbook/docs/orbit/architecture/contracts.md
+  - handbook/docs/orbit/decisions/018-orbit-rate-limiting.md
+---
+
 # orbit-rate-limiting
 
 Redis (or in-memory) token-bucket limiter for API edges. Status: `beta`. MIT — `github.com/manovaspace/orbit-rate-limiting`.
