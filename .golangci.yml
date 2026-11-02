@@ -3,9 +3,39 @@ version: "2"
 linters:
   default: none
   enable:
+    - depguard
     - errcheck
     - govet
     - ineffassign
     - staticcheck
     - unused
-
+  settings:
+    depguard:
+      rules:
+        # The domain is pure types and the Limiter port. It imports no Redis
+        # client, HTTP server or adapter.
+        ratelimit-domain:
+          files:
+            - "**/internal/domain/**"
+          deny:
+            - pkg: "github.com/redis/go-redis"
+              desc: "internal/domain declares the Limiter port; Redis lives in infrastructure"
+            - pkg: "net/http"
+              desc: "internal/domain has no HTTP server"
+            - pkg: "os/exec"
+              desc: "internal/domain is pure and runs no process"
+            - pkg: "github.com/manovaspace/orbit-rate-limiting/internal/infrastructure"
+              desc: "internal/domain must not depend on an adapter"
+        # The application layer holds shared rules and imports no adapter.
+        ratelimit-application:
+          files:
+            - "**/internal/application/**"
+          deny:
+            - pkg: "github.com/redis/go-redis"
+              desc: "internal/application reaches Redis through the domain adapter, never directly"
+            - pkg: "net/http"
+              desc: "internal/application has no HTTP server"
+            - pkg: "os/exec"
+              desc: "internal/application runs no process"
+            - pkg: "github.com/manovaspace/orbit-rate-limiting/internal/infrastructure"
+              desc: "internal/application must not depend on an adapter"

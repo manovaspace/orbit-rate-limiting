@@ -1,4 +1,4 @@
-package ratelimiting
+package memory
 
 import (
 	"context"
@@ -7,13 +7,15 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/manovaspace/orbit-rate-limiting/internal/domain"
 )
 
 func TestMemoryLimiterAllowsThenBlocks(t *testing.T) {
-	m := NewMemoryLimiter()
+	m := New()
 	fixed := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
 	m.now = func() time.Time { return fixed }
-	p := Policy{Class: "auth_password", Limit: 2, Window: time.Minute}
+	p := domain.Policy{Class: "auth_password", Limit: 2, Window: time.Minute}
 	ctx := context.Background()
 	for i := 0; i < 2; i++ {
 		d, err := m.Allow(ctx, "rl:auth_password:1.2.3.4", p)
@@ -34,10 +36,10 @@ func TestMemoryLimiterAllowsThenBlocks(t *testing.T) {
 }
 
 func TestMemoryLimiter_KeyIsolation(t *testing.T) {
-	m := NewMemoryLimiter()
+	m := New()
 	fixed := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 	m.now = func() time.Time { return fixed }
-	p := Policy{Class: "auth_password", Limit: 3, Window: time.Minute}
+	p := domain.Policy{Class: "auth_password", Limit: 3, Window: time.Minute}
 	ctx := context.Background()
 
 	keyA := "rl:auth_password:user_a"
@@ -94,7 +96,7 @@ func TestMemoryLimiter_KeyIsolation(t *testing.T) {
 }
 
 func TestMemoryLimiter_WindowExpiration(t *testing.T) {
-	m := NewMemoryLimiter()
+	m := New()
 	var (
 		mu      sync.Mutex
 		simTime = time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
@@ -112,7 +114,7 @@ func TestMemoryLimiter_WindowExpiration(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	p := Policy{Class: "auth_otp_request", Limit: 2, Window: 10 * time.Second}
+	p := domain.Policy{Class: "auth_otp_request", Limit: 2, Window: 10 * time.Second}
 	key := "rl:auth_otp:192.0.2.1"
 
 	// T0: Consume all 2 tokens
@@ -169,7 +171,7 @@ func TestMemoryLimiter_WindowExpiration(t *testing.T) {
 	}
 
 	// Test zero / negative limit and window bypass
-	unlimitedP := Policy{Class: "unlimited", Limit: 0, Window: time.Minute}
+	unlimitedP := domain.Policy{Class: "unlimited", Limit: 0, Window: time.Minute}
 	dUnl, err := m.Allow(ctx, "unlimited_key", unlimitedP)
 	if err != nil || !dUnl.Allowed {
 		t.Fatalf("zero limit policy should be allowed, got %v, err=%v", dUnl.Allowed, err)
@@ -177,7 +179,7 @@ func TestMemoryLimiter_WindowExpiration(t *testing.T) {
 }
 
 func TestMemoryLimiter_Concurrent(t *testing.T) {
-	m := NewMemoryLimiter()
+	m := New()
 	fixed := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 	m.now = func() time.Time { return fixed }
 
@@ -185,7 +187,7 @@ func TestMemoryLimiter_Concurrent(t *testing.T) {
 		limit         = 50
 		numGoroutines = 200
 	)
-	p := Policy{Class: "concurrent_test", Limit: limit, Window: time.Minute}
+	p := domain.Policy{Class: "concurrent_test", Limit: limit, Window: time.Minute}
 	ctx := context.Background()
 
 	var (
@@ -233,7 +235,7 @@ func TestMemoryLimiter_Concurrent(t *testing.T) {
 		goroutinesPerKey = 30
 		perKeyLimit      = 10
 	)
-	multiPolicy := Policy{Class: "concurrent_multi", Limit: perKeyLimit, Window: time.Minute}
+	multiPolicy := domain.Policy{Class: "concurrent_multi", Limit: perKeyLimit, Window: time.Minute}
 
 	var (
 		multiWG           sync.WaitGroup
