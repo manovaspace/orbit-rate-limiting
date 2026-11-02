@@ -1,4 +1,5 @@
-package ratelimiting
+// Package redis is the Redis token-bucket adapter.
+package redis
 
 import (
 	"context"
@@ -6,16 +7,20 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/manovaspace/orbit-rate-limiting/internal/application"
+	"github.com/manovaspace/orbit-rate-limiting/internal/domain"
 )
 
-// RedisLimiter implements Limiter with a Redis token bucket (Lua).
-type RedisLimiter struct {
+// Limiter implements domain.Limiter with a Redis token bucket (Lua).
+type Limiter struct {
 	client *redis.Client
 	now    func() time.Time
 }
 
-func NewRedisLimiter(client *redis.Client) *RedisLimiter {
-	return &RedisLimiter{client: client, now: time.Now}
+// New wraps a Redis client.
+func New(client *redis.Client) *Limiter {
+	return &Limiter{client: client, now: time.Now}
 }
 
 // tokenBucketScript: KEYS[1]=key ARGV[1]=limit ARGV[2]=window_ms ARGV[3]=now_ms
@@ -51,9 +56,10 @@ local remaining = math.floor(tokens)
 return {allowed, remaining, retry_ms}
 `)
 
-func (r *RedisLimiter) Allow(ctx context.Context, key string, policy Policy) (Decision, error) {
-	if policy.Limit <= 0 || policy.Window <= 0 {
-		return Decision{Allowed: true, Limit: policy.Limit}, nil
+// Allow consumes one token from the Redis bucket.
+func (r *Limiter) Allow(ctx context.Context, key string, policy domain.Policy) (domain.Decision, error) {
+	if decision, ok := application.Unlimited(policy); ok {
+		return decision, nil
 	}
 	now := r.now()
 	windowMS := policy.Window.Milliseconds()
@@ -63,19 +69,19 @@ func (r *RedisLimiter) Allow(ctx context.Context, key string, policy Policy) (De
 	res, err := tokenBucketScript.Run(ctx, r.client, []string{key},
 		policy.Limit, windowMS, now.UnixMilli()).Slice()
 	if err != nil {
-		return Decision{}, fmt.Errorf("redis rate limit: %w", err)
+		return domain.Decision{}, fmt.Errorf("redis rate limit: %w", err)
 	}
 	allowed := toInt64(res[0]) == 1
 	remaining := int(toInt64(res[1]))
 	retryMS := toInt64(res[2])
-	d := Decision{
+	d := domain.Decision{
 		Allowed:   allowed,
 		Limit:     policy.Limit,
 		Remaining: remaining,
 		ResetAt:   now.Add(policy.Window),
 	}
 	if !allowed {
-		d.RetryAfter = time.Duration(retryMS) * time.Millisecond
+		d.RetryAfter = application.MinimumRetryAfter(time.Duration(retryMS) * time.Millisecond)
 		d.Remaining = 0
 	}
 	return d, nil
@@ -95,3 +101,5 @@ func toInt64(v any) int64 {
 		return 0
 	}
 }
+
+var _ domain.Limiter = (*Limiter)(nil)

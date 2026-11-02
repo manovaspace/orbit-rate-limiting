@@ -30,11 +30,28 @@ lim := ratelimiting.NewMemoryLimiter()
 
 Typical gateway env: `REDIS_ADDR`, `RATE_LIMIT_TRUST_PROXY`.
 
+## Layout
+
+```
+limiter.go                                  public facade (unchanged API)
+internal/domain/                            Policy, Decision, ADR-018 defaults, Limiter port
+internal/application/                       shared bypass rule and Retry-After floor
+internal/infrastructure/memory/             process-local token bucket
+internal/infrastructure/redis/              Redis token bucket (Lua)
+```
+
+The domain imports no infrastructure package. The public facade only maps the
+exported types to the domain types and wires the adapter; it keeps the same
+signatures every consumer compiles against.
+
 ## Development
 
 ```bash
 go test ./...
 ```
+
+The library has no database, HTTP server or event bus, so tests need no service
+and no environment variable.
 
 ## Contributing
 
