@@ -278,3 +278,118 @@ func TestMemoryLimiter_Concurrent(t *testing.T) {
 		}
 	}
 }
+
+func TestMemoryLimiter_SweepEvictsRefilledBuckets(t *testing.T) {
+	m := New()
+	clock := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return clock }
+	ctx := context.Background()
+	p := domain.Policy{Class: "sweep_size", Limit: 5, Window: time.Second}
+
+	for i := 0; i < 20_000; i++ {
+		if _, err := m.Allow(ctx, fmt.Sprintf("rl:sweep:key_%d", i), p); err != nil {
+			t.Fatalf("key %d: unexpected error: %v", i, err)
+		}
+	}
+
+	// Every bucket was touched at T and has refilled (window 1s). The size
+	// trigger is doubling-gated and will not fire at 20k after a sweep at
+	// 10k, so advance by sweepInterval to make the interval sweep run.
+	clock = clock.Add(sweepInterval)
+	if _, err := m.Allow(ctx, "rl:sweep:fresh", p); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(m.buckets); got != 1 {
+		t.Fatalf("expected idle buckets evicted leaving 1, got %d", got)
+	}
+}
+
+func TestMemoryLimiter_SweepIsDoublingBounded(t *testing.T) {
+	m := New()
+	clock := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return clock }
+	ctx := context.Background()
+	// Long window: every key stays active, so nothing is evicted and only the
+	// size trigger can fire.
+	p := domain.Policy{Class: "sweep_bound", Limit: 2, Window: time.Hour}
+
+	// The first call runs the interval sweep (lastSweep is zero); exclude it.
+	if _, err := m.Allow(ctx, "rl:sweep:bound_0", p); err != nil {
+		t.Fatal(err)
+	}
+	m.sweeps = 0
+
+	const total = 3 * sweepSize
+	for i := 1; i < total; i++ {
+		if _, err := m.Allow(ctx, fmt.Sprintf("rl:sweep:bound_%d", i), p); err != nil {
+			t.Fatalf("key %d: unexpected error: %v", i, err)
+		}
+	}
+	// Size sweeps fire at 10k and 20k only, so no per-call scanning.
+	if m.sweeps > 2 {
+		t.Fatalf("expected at most 2 size sweeps for %d keys, got %d", total, m.sweeps)
+	}
+}
+
+func TestMemoryLimiter_SweepKeepsActiveBucketDecision(t *testing.T) {
+	m := New()
+	clock := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return clock }
+	ctx := context.Background()
+	p := domain.Policy{Class: "sweep_active", Limit: 2, Window: time.Second}
+	keyA := "rl:sweep:active_a"
+
+	for i := 0; i < 2; i++ {
+		if d, err := m.Allow(ctx, keyA, p); err != nil || !d.Allowed {
+			t.Fatalf("drain A %d: allowed=%v err=%v", i, d.Allowed, err)
+		}
+	}
+
+	// A quarter window later A has refilled 0.5 tokens: still denied and still
+	// inside its window, so the size-triggered sweep must keep it.
+	clock = clock.Add(250 * time.Millisecond)
+	for i := 0; i < sweepSize+1; i++ {
+		if _, err := m.Allow(ctx, fmt.Sprintf("rl:sweep:other_%d", i), p); err != nil {
+			t.Fatalf("other key %d: unexpected error: %v", i, err)
+		}
+	}
+	if _, ok := m.buckets[keyA]; !ok {
+		t.Fatal("active bucket A was evicted before its window elapsed")
+	}
+	d, err := m.Allow(ctx, keyA, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Allowed || d.Remaining != 0 {
+		t.Fatalf("A expected denied with remaining 0, got allowed=%v remaining=%d", d.Allowed, d.Remaining)
+	}
+}
+
+func TestMemoryLimiter_EvictionPreservesDecision(t *testing.T) {
+	m := New()
+	clock := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return clock }
+	ctx := context.Background()
+	// Window equals sweepInterval so advancing by exactly window also triggers
+	// the interval sweep, which evicts A on the call below.
+	p := domain.Policy{Class: "sweep_refill", Limit: 2, Window: time.Minute}
+	key := "rl:sweep:refill_a"
+
+	for i := 0; i < 2; i++ {
+		if d, err := m.Allow(ctx, key, p); err != nil || !d.Allowed {
+			t.Fatalf("drain %d: allowed=%v err=%v", i, d.Allowed, err)
+		}
+	}
+	if d, err := m.Allow(ctx, key, p); err != nil || d.Allowed {
+		t.Fatalf("expected deny while drained: allowed=%v err=%v", d.Allowed, err)
+	}
+
+	clock = clock.Add(p.Window)
+	d, err := m.Allow(ctx, key, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.Allowed || d.Remaining != p.Limit-1 {
+		t.Fatalf("after refill expected allowed remaining %d, got allowed=%v remaining=%d", p.Limit-1, d.Allowed, d.Remaining)
+	}
+}
