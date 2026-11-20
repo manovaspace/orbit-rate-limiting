@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2](https://github.com/manovaspace/orbit-rate-limiting/compare/v0.2.1...v0.2.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* **deps:** upgrade Go to 1.27.4 and patch vulnerable modules ([#32](https://github.com/manovaspace/orbit-rate-limiting/issues/32)) ([c417869](https://github.com/manovaspace/orbit-rate-limiting/commit/c417869f81c63c7a8b0bea5287cd677fc944354a))
+
 ## [0.2.1](https://github.com/manovaspace/orbit-rate-limiting/compare/v0.2.0...v0.2.1) (2026-11-08)
 
 
