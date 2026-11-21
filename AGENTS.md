@@ -4,6 +4,8 @@ read_with:
   - handbook/docs/orbit/decisions/018-orbit-rate-limiting.md
 ---
 
+> **Moved.** This module is now the `ratelimiting` package of [orbit-kit](https://github.com/manovaspace/orbit-kit) (`github.com/manovaspace/orbit-kit/ratelimiting`). This repository is archived and gets no more releases. To migrate, replace the import path `github.com/manovaspace/orbit-rate-limiting` with `github.com/manovaspace/orbit-kit/ratelimiting` and run `go get github.com/manovaspace/orbit-kit@latest && go mod tidy`.
+
 # orbit-rate-limiting
 
 Redis (or in-memory) token-bucket limiter for API edges. Status: `beta`. MIT — `github.com/manovaspace/orbit-rate-limiting`.
