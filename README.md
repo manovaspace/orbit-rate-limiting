@@ -1,5 +1,7 @@
 # orbit-rate-limiting
 
+> **Moved.** This module is now the `ratelimiting` package of [orbit-kit](https://github.com/manovaspace/orbit-kit) (`github.com/manovaspace/orbit-kit/ratelimiting`). This repository is archived and gets no more releases. To migrate, replace the import path `github.com/manovaspace/orbit-rate-limiting` with `github.com/manovaspace/orbit-kit/ratelimiting` and run `go get github.com/manovaspace/orbit-kit@latest && go mod tidy`.
+
 [![CI](https://github.com/manovaspace/orbit-rate-limiting/actions/workflows/ci.yml/badge.svg)](https://github.com/manovaspace/orbit-rate-limiting/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
